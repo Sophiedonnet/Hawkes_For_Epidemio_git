@@ -3,6 +3,7 @@ rm(list = ls())
 
 library(parallel)
 library(mvtnorm)
+library(ggplot2)
 
 source('functions/simulation_hawkes_multidim.R')
 source('functions/functions_likelihood_hawkes.R')
@@ -22,7 +23,7 @@ M = 1; smax = rep(0.04,M^2); nu = rep(20,M)
 nb_M = "M=1"
 
 s <- alpha <- lalpha <- list();
-l <- 1; m <- 1; p = (m-1)*M+l;  s[[p]] = seq(0,smax[p],length=100);  alpha[[p]] <- dnorm(s[[p]][-1],0.02,0.004)/4
+l <- 1; m <- 1; p = (m-1)*M+l;  s[[p]] = seq(0,smax[p],length=10);  alpha[[p]] <- dnorm(s[[p]][-1],0.02,0.004)/4
 K = sapply(1:M^2,function(p){length(alpha[[p]])});
 s = lapply(1:M^2,function(p){seq(0,smax[p],len=K[p]+1)})
 delta = vapply(1:M^2,function(p){as.numeric(max(alpha[[p]])>0)},1)
@@ -51,7 +52,7 @@ eigen(I)
 #------ SIMULATION des données 
 #-----------------------------------
 
-Times = simulation_hawkes_multidim(100,h_vrai,nu,op_affichage=1)$Times
+Times = simulation_hawkes_multidim(40,h_vrai,nu,op_affichage=1)$Times
   
 Tmax = 40;
 Tinf = 20; 
@@ -89,7 +90,6 @@ hyperParam_prior$lambda_K=lambda_K
 #------ tuning 
 N_MCMC = 30000
 op_echan = list(alpha = c(1:M^2),K = c(1:M^2),nu = c(1:M),lambda_K = c(1),delta = c(),s = c(1:M^2))
-
 par_algo_MCMC =list(op_echan = op_echan)
 par_algo_MCMC$op_affichage = 1000
 par_algo_MCMC$N_MCMC = N_MCMC
@@ -101,26 +101,21 @@ par_algo_MCMC$rho_lalpha = 1
 
 h_init = list()
 h_init$smax = rep(0.04,M^2)
-h_init$delta = rep(0,M^2)
+h_init$delta = rep(1,M^2)
 h_init$K =   rep(1,M^2)
 h_init$s =   list(); for (p in  1:(M^2)) {h_init$s[[p]] =   seq(0,h_init$smax[p],length =   h_init$K[p] + 1)}
 h_init$alpha =   lapply(1:M^2,function(p){c(0)})
 h_init$lalpha =   lapply(1:M^2,function(p){c(-10000)})
 nu_init  =    vapply(1:M,function(m){length(data$Times_obs[[m]])/(data$Tmax[m] - data$Tinf[m])},1)
-
 theta_init =   list(h =   h_init,nu =   nu_init,lambda_K =   lambda_K)
 INPUT =   list(theta =   theta_init)
 
 
 #------- Running MCMC (Reversible Jump) 
-RES_MCMC_2 <- list()
-compu.time <- proc.time()
-RES_MCMC_2 = RJ_Kernel_moving_s_positive_intensity(data,INPUT,hyperParam_prior,par_algo_MCMC,op.plot = FALSE,h_vrai=c())
-compu.time <-proc.time()-compu.time
-RES_MCMC_2$compu.time <- compu.time
-RES_MCMC_2$INPUT <- INPUT
-RES_MCMC_2$hyperParam_prior <- hyperParam_prior
-RES_MCMC_2$par_algo_MCMC <- par_algo_MCMC
+resMCMC = RJ_Kernel_moving_s_positive_intensity(data,INPUT,hyperParam_prior,par_algo_MCMC)
+resMCMC$INPUT <- INPUT
+resMCMC$hyperParam_prior <- hyperParam_prior
+resMCMC$par_algo_MCMC <- par_algo_MCMC
 
 
 #----------------------------------------------------
@@ -129,43 +124,38 @@ RES_MCMC_2$par_algo_MCMC <- par_algo_MCMC
 part=seq(10000,30000,by=5)
 L=length(part)
 
-RES.MCMC = RES_MCMC_2
+ 
 
 lensim  = "T=20"
-l = 1#(p-1)%%M+1
-m = 1 #(p-1)%/%M+1
-absc=seq(0,theta_vrai$h_vrai$smax[p],len=100)
+absc=seq(0,theta_vrai$h_vrai$smax[1],len=100)
 traj = matrix(0,L,length(absc))
 for (j in 1:L){
-        h_func_j = stepfun(RES.MCMC$h[[part[j]]]$s[[p]],c(0,RES.MCMC$h[[part[j]]]$alpha[[p]],0),right=TRUE)
-        traj[j,]=h_func_j(absc)
-      }
-      h_func_vrai = stepfun(theta_vrai$h_vrai$s[[p]],c(0,theta_vrai$h_vrai$alpha[[p]],0),right=TRUE)
-      est_h=apply(traj,2,mean)
-      h_vrai =h_func_vrai(absc)
-      h_05= vapply(1:100,function(j){quantile(traj[,j],0.05)},1)
-      h_50= vapply(1:100,function(j){quantile(traj[,j],0.5)},1)
-      h_95= vapply(1:100,function(j){quantile(traj[,j],0.95)},1)
-      H = c(h_vrai,est_h,h_05,h_50,h_95)
-      H_min = c(h_05,h_05,h_05,h_05,h_05)
-      H_max = c(h_95,h_95,h_95,h_95,h_95)
-      var.names=rep(c("True h","Post Mean","q_05","Median","q_95"),each=length(absc))
-      Vec.p = rep(paste(l,'over',m,sep=' '),5*length(absc))
-      Vec.absc =rep(absc,5)
-    
+  h_func_j = stepfun(resMCMC$h[[part[j]]]$s[[1]],c(0,resMCMC$h[[part[j]]]$alpha[[1]],0),right=TRUE)
+  traj[j,]=h_func_j(absc)
+}
+h_func_vrai = stepfun(theta_vrai$h_vrai$s[[1]],c(0,theta_vrai$h_vrai$alpha[[1]],0),right=TRUE)
+est_h = apply(traj,2,mean)
+h_vrai = h_func_vrai(absc)
+h_05 = vapply(1:100,function(j){quantile(traj[,j],0.05)},1)
+h_50 = vapply(1:100,function(j){quantile(traj[,j],0.5)},1)
+h_95 = vapply(1:100,function(j){quantile(traj[,j],0.95)},1)
+H = c(h_vrai,est_h,h_50)
+var.names = rep(c("True h","Post Mean","Median"),each = length(absc))
+Vec.absc = rep(absc,3)
+estim.h = data.frame(H = H,var.names,est_h,Time = Vec.absc)
+
+#  
+rib <- data.frame(Time = absc)
+rib$H_min <- h_05;
+rib$H_max <- h_95
   
-  data.frame.estim.h = data.frame(H=H,var.names,est_h,p=as.factor(Vec.p),Time=Vec.absc,H_min,H_max)
-  data.frame.estim.h$var.names  = factor(data.frame.estim.h$var.names , levels = c("True h","Post Mean","Median","q_05","q_95"))
-  #   
-  
-  
-  mygrey = "grey80"
-  mycolor = c("black", "black", "black",mygrey,mygrey)
-  
-  library(ggplot2)
-p <-  ggplot(data.frame.estim.h, aes(x=Time,y=H,colour=var.names,linetype = var.names))
-p <- p + geom_ribbon(data = data.frame.estim.h, aes(x = Time, ymin = H_min, ymax = H_max),fill = mygrey,show.legend=FALSE)
-p <- p + geom_line(aes(x=Time,y=H)) +  scale_color_manual(values=mycolor)
-p <- p + scale_linetype_manual(values = c("solid", "dashed","dotted",rep("solid",2)))
-p <- p + ylab("Intensities")+theme(legend.title = element_blank(),legend.position='none')
+estim.h$Func = factor(estim.h$var.names , levels = c("True h","Post Mean","Median"))
+
+
+p <-  ggplot()
+p <- p +  geom_ribbon(data = rib,aes(x = rib$Time, ymin = rib$H_min, ymax = rib$H_max),alpha = 0.1,fill="blue",colour='black')
+p <- p +  geom_line(data = estim.h, aes(x=Time,y=H,group = Func,colour = Func,linetype = Func),lwd=1.01)
+p <- p + scale_fill_brewer(palette =  "Dark2") + scale_color_brewer(palette="Dark2")
+p <- p + ylab("Intensities") + xlab('Time')
 p
+

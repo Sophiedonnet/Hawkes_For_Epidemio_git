@@ -204,7 +204,7 @@ compt_accept_heights <-   0
   #----------------------- move on lalpha
   #########################################
      indic_simu = 'heights'
-     for (p in intersect(op_echan$alpha,which(h$delta == 1))) { 
+     for (p in op_echan$alpha) { 
        m <- (p - 1) %/% M + 1
        for (k in 1:(h$K[p])) { 
          h_c <- h;          
@@ -247,7 +247,7 @@ compt_accept_heights <-   0
      #----------------------- birth and death
      #########################################
 
-    for (p in intersect(op_echan$K,which(h$delta == 1))) { 
+    for (p in op_echan$K) { 
        K_p = h$K[p]; 
        log_lik_c = log_lik
        m <- (p - 1) %/% M + 1
