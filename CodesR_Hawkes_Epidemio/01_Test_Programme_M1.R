@@ -1,0 +1,171 @@
+rm(list = ls())
+
+
+library(parallel)
+library(mvtnorm)
+
+source('functions/simulation_hawkes_multidim.R')
+source('functions/functions_likelihood_hawkes.R')
+source('functions/functions_likelihood_hawkes_positive_intensity.R')
+source('functions/RJ_Kernel_regular_s_positive_intensity.R')
+source('functions/RJ_Kernel_moving_s_positive_intensity.R')
+
+
+op.plot= TRUE
+
+#-----------------------------------
+#-------- PARAM de simulation 
+#-----------------------------------
+
+
+M = 1; smax = rep(0.04,M^2); nu = rep(20,M)
+nb_M = "M=1"
+
+s <- alpha <- lalpha <- list();
+l <- 1; m <- 1; p = (m-1)*M+l;  s[[p]] = seq(0,smax[p],length=100);  alpha[[p]] <- dnorm(s[[p]][-1],0.02,0.004)/4
+K = sapply(1:M^2,function(p){length(alpha[[p]])});
+s = lapply(1:M^2,function(p){seq(0,smax[p],len=K[p]+1)})
+delta = vapply(1:M^2,function(p){as.numeric(max(alpha[[p]])>0)},1)
+
+h_vrai=list(alpha=alpha,s=s,smax=smax,K=K,delta=delta)
+nu_vrai=nu;
+theta_vrai = list(h_vrai=h_vrai,nu_vrai=nu_vrai)
+
+#------- plot de $h_p$
+par(mfrow=c(M,M))
+I=matrix(0,M,M)
+for (p in 1:M^2){
+  l = (p-1)%%M+1
+  m = (p-1)%/%M+1
+  print(c(l,m))
+ 
+  h_p  <- stepfun(h_vrai$s[[p]],c(0,h_vrai$alpha[[p]],0),right=T)
+  curve(h_p,0,smax[p],col='red',lwd=2)
+  I[l,m] =sum(diff(h_vrai$s[[p]])*(h_vrai$alpha[[p]]))
+  curve(h_p,0,0.04)
+}
+eigen(I)
+
+
+#-----------------------------------
+#------ SIMULATION des données 
+#-----------------------------------
+
+Times = simulation_hawkes_multidim(100,h_vrai,nu,op_affichage=1)$Times
+  
+Tmax = 40;
+Tinf = 20; 
+Times_obs=lapply(1:M,function(m){u_m=Times[[m]]; u_m = u_m[u_m>Tinf]; u_m=u_m[u_m <= Tmax]})
+Times_utiles=lapply(1:M,function(m){u_m=Times[[m]]; u_m=u_m[u_m > Tinf-max(h_vrai$smax)];  u_m=u_m[u_m <= Tmax]})
+mat_obs_utiles =calc_mat_absc_utiles(Times_utiles,Times_obs,h_vrai$smax)
+data=list(mat_obs_utiles=mat_obs_utiles);
+data$Times_utiles = Times_utiles  
+data$Times_obs = Times_obs
+data$Tinf = rep(Tinf,M)
+data$Tmax = rep(Tmax,M)
+data$smax = h_vrai$smax 
+
+  
+#--------------------------------
+#------  PRIOR DISTRIBUTION
+#-------------------------------
+p_Z = c(0.5,0.5); p_Z=p_Z/sum(p_Z)
+pi_0 = 0.5;
+mu_lalpha =2.5; s_lalpha = 1
+mu_lnu = rep(3.5,M); s_lnu=rep(1,M)
+hyperParam_prior=list(M=M,mu_lalpha=mu_lalpha,s_lalpha=s_lalpha,mu_lnu=mu_lnu,s_lnu=s_lnu,p_Z=p_Z,a_s=2,pi_0=pi_0)
+hyperParam_prior$a_lambda_K = 20;
+hyperParam_prior$b_lambda_K = 1
+lambda_K = rgamma(1,hyperParam_prior$a_lambda_K,hyperParam_prior$b_lambda_K)
+hyperParam_prior$lambda_K=lambda_K
+
+
+
+
+#-----------------------------
+#--------- REVERSIBLE JUMP
+#------------------------------
+
+#------ tuning 
+N_MCMC = 30000
+op_echan = list(alpha = c(1:M^2),K = c(1:M^2),nu = c(1:M),lambda_K = c(1),delta = c(),s = c(1:M^2))
+
+par_algo_MCMC =list(op_echan = op_echan)
+par_algo_MCMC$op_affichage = 1000
+par_algo_MCMC$N_MCMC = N_MCMC
+par_algo_MCMC$rho_lnu = 1
+par_algo_MCMC$rho_lalpha = 1
+
+
+#--------- Initialisation
+
+h_init = list()
+h_init$smax = rep(0.04,M^2)
+h_init$delta = rep(0,M^2)
+h_init$K =   rep(1,M^2)
+h_init$s =   list(); for (p in  1:(M^2)) {h_init$s[[p]] =   seq(0,h_init$smax[p],length =   h_init$K[p] + 1)}
+h_init$alpha =   lapply(1:M^2,function(p){c(0)})
+h_init$lalpha =   lapply(1:M^2,function(p){c(-10000)})
+nu_init  =    vapply(1:M,function(m){length(data$Times_obs[[m]])/(data$Tmax[m] - data$Tinf[m])},1)
+
+theta_init =   list(h =   h_init,nu =   nu_init,lambda_K =   lambda_K)
+INPUT =   list(theta =   theta_init)
+
+
+#------- Running MCMC (Reversible Jump) 
+RES_MCMC_2 <- list()
+compu.time <- proc.time()
+RES_MCMC_2 = RJ_Kernel_moving_s_positive_intensity(data,INPUT,hyperParam_prior,par_algo_MCMC,op.plot = FALSE,h_vrai=c())
+compu.time <-proc.time()-compu.time
+RES_MCMC_2$compu.time <- compu.time
+RES_MCMC_2$INPUT <- INPUT
+RES_MCMC_2$hyperParam_prior <- hyperParam_prior
+RES_MCMC_2$par_algo_MCMC <- par_algo_MCMC
+
+
+#----------------------------------------------------
+#-------------------------- POSTERIOR inference
+#---------------------------------------------------- 
+part=seq(10000,30000,by=5)
+L=length(part)
+
+RES.MCMC = RES_MCMC_2
+
+lensim  = "T=20"
+l = 1#(p-1)%%M+1
+m = 1 #(p-1)%/%M+1
+absc=seq(0,theta_vrai$h_vrai$smax[p],len=100)
+traj = matrix(0,L,length(absc))
+for (j in 1:L){
+        h_func_j = stepfun(RES.MCMC$h[[part[j]]]$s[[p]],c(0,RES.MCMC$h[[part[j]]]$alpha[[p]],0),right=TRUE)
+        traj[j,]=h_func_j(absc)
+      }
+      h_func_vrai = stepfun(theta_vrai$h_vrai$s[[p]],c(0,theta_vrai$h_vrai$alpha[[p]],0),right=TRUE)
+      est_h=apply(traj,2,mean)
+      h_vrai =h_func_vrai(absc)
+      h_05= vapply(1:100,function(j){quantile(traj[,j],0.05)},1)
+      h_50= vapply(1:100,function(j){quantile(traj[,j],0.5)},1)
+      h_95= vapply(1:100,function(j){quantile(traj[,j],0.95)},1)
+      H = c(h_vrai,est_h,h_05,h_50,h_95)
+      H_min = c(h_05,h_05,h_05,h_05,h_05)
+      H_max = c(h_95,h_95,h_95,h_95,h_95)
+      var.names=rep(c("True h","Post Mean","q_05","Median","q_95"),each=length(absc))
+      Vec.p = rep(paste(l,'over',m,sep=' '),5*length(absc))
+      Vec.absc =rep(absc,5)
+    
+  
+  data.frame.estim.h = data.frame(H=H,var.names,est_h,p=as.factor(Vec.p),Time=Vec.absc,H_min,H_max)
+  data.frame.estim.h$var.names  = factor(data.frame.estim.h$var.names , levels = c("True h","Post Mean","Median","q_05","q_95"))
+  #   
+  
+  
+  mygrey = "grey80"
+  mycolor = c("black", "black", "black",mygrey,mygrey)
+  
+  library(ggplot2)
+p <-  ggplot(data.frame.estim.h, aes(x=Time,y=H,colour=var.names,linetype = var.names))
+p <- p + geom_ribbon(data = data.frame.estim.h, aes(x = Time, ymin = H_min, ymax = H_max),fill = mygrey,show.legend=FALSE)
+p <- p + geom_line(aes(x=Time,y=H)) +  scale_color_manual(values=mycolor)
+p <- p + scale_linetype_manual(values = c("solid", "dashed","dotted",rep("solid",2)))
+p <- p + ylab("Intensities")+theme(legend.title = element_blank(),legend.position='none')
+p
