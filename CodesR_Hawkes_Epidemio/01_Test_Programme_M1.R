@@ -153,9 +153,35 @@ estim.h$Func = factor(estim.h$var.names , levels = c("True h","Post Mean","Media
 
 
 p <-  ggplot()
-p <- p +  geom_ribbon(data = rib,aes(x = rib$Time, ymin = rib$H_min, ymax = rib$H_max),alpha = 0.1,fill="blue",colour='black')
+p <- p +  geom_ribbon(data = rib,aes(x = Time, ymin = H_min, ymax = H_max),alpha = 0.1,fill="blue",colour='black')
 p <- p +  geom_line(data = estim.h, aes(x=Time,y=H,group = Func,colour = Func,linetype = Func),lwd=1.01)
 p <- p + scale_fill_brewer(palette =  "Dark2") + scale_color_brewer(palette="Dark2")
 p <- p + ylab("Intensities") + xlab('Time')
 p
+
+
+#----------------------------------------------
+# ------------- PLOT intensities 
+#---------------------------------------------- 
+
+ 
+Tinf = 38
+Tmax = 40
+m =1
+
+jumps <- jumps_integral(data$Times_utiles,theta_vrai$h_vrai$s,Tinf,Tmax,theta_vrai$h_vrai$smax)
+mat_centerjumps_utiles <- calc_mat_absc_utiles(data$Times_utiles,center_jumps(jumps),theta_vrai$h_vrai$smax)
+lambda_vrai = lambda_cond_multidim_mat(mat_centerjumps_utiles,theta_vrai$h_vrai,theta_vrai$nu)
+
+plot(center_jumps(jumps)[[m]],lambda_vrai[[m]],type='n',xlab='Time',ylab='Conditional Intensities')
+
+for (l in 1:10){
+  nu_l = resMCMC$nu[part[l],]
+  h_l = resMCMC$h[[part[l]]]
+  jumps.l <- jumps_integral(data$Times_utiles,h_l$s,Tinf,Tmax,h_l$smax)
+  mat_centerjumps_utiles.l <- calc_mat_absc_utiles(data$Times_utiles,center_jumps(jumps.l),h_l$smax)
+  lambda_l = lambda_cond_multidim_mat(mat_centerjumps_utiles.l,h_l,nu_l)
+  lines(center_jumps(jumps.l)[[m]],lambda_l[[m]],col='grey',type='s')
+}
+lines(center_jumps(jumps)[[m]],lambda_vrai[[m]],type='s',xlab='Time',ylab='Conditional Intensities')
 
