@@ -1,0 +1,361 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(parallel)
+library(mvtnorm)
+library(ggplot2)
+
+source('functions/simulation_hawkes_multidim.R')
+source('functions/functions_likelihood_hawkes.R')
+source('functions/functions_likelihood_hawkes_positive_intensity.R')
+source('functions/RJ_Kernel_regular_s_positive_intensity.R')
+source('functions/RJ_Kernel_moving_s_positive_intensity.R')
+
+
+op.plot= TRUE
+```
+
+```{r}
+#-----------------------------------
+#-------- PARAM de simulation 
+#-----------------------------------
+
+
+M = 1; smax = rep(1.5,M^2); nu = rep(0.5,M)
+nb_M = "M=1"
+
+s <- alpha <- lalpha <- list();
+l <- 1; m <- 1; p = (m-1)*M+l;  s[[p]] = seq(0,smax[p],length=3);  alpha[[p]] <- c(1.3,0.8,0.4);
+K = sapply(1:M^2,function(p){length(alpha[[p]])});
+s = lapply(1:M^2,function(p){seq(0,smax[p],len=K[p]+1)})
+delta = vapply(1:M^2,function(p){as.numeric(max(alpha[[p]])>0)},1)
+
+h_vrai=list(alpha=alpha,s=s,smax=smax,K=K,delta=delta)
+nu_vrai=nu;
+theta_vrai = list(h_vrai=h_vrai,nu_vrai=nu_vrai)
+
+#------- plot de $h_p$
+par(mfrow=c(M,M))
+I=matrix(0,M,M)
+for (p in 1:M^2){
+  l = (p-1)%%M+1
+  m = (p-1)%/%M+1
+  print(c(l,m))
+ 
+  h_p  <- stepfun(h_vrai$s[[p]],c(0,h_vrai$alpha[[p]],0),right=T)
+  curve(h_p,0,smax[p],col='red',lwd=2)
+  I[l,m] =sum(diff(h_vrai$s[[p]])*(h_vrai$alpha[[p]]))
+  curve(h_p,0,1.5)
+}
+eigen(I)
+```
+
+```{r}
+#-----------------------------------
+#------ SIMULATION des données 
+#-----------------------------------
+
+Times = simulation_hawkes_multidim(30,h_vrai,nu,op_affichage=1)$Times
+  
+Tmax = 30;
+Tinf = 1; 
+Times_obs=lapply(1:M,function(m){u_m=Times[[m]]; u_m = u_m[u_m>Tinf]; u_m=u_m[u_m <= Tmax]})
+Times_utiles=lapply(1:M,function(m){u_m=Times[[m]]; u_m=u_m[u_m > Tinf-max(h_vrai$smax)];  u_m=u_m[u_m <= Tmax]})
+mat_obs_utiles =calc_mat_absc_utiles(Times_utiles,Times_obs,h_vrai$smax)
+data=list(mat_obs_utiles=mat_obs_utiles);
+data$Times_utiles = Times_utiles  
+data$Times_obs = Times_obs
+data$Tinf = rep(Tinf,M)
+data$Tmax = rep(Tmax,M)
+data$smax = h_vrai$smax 
+```
+
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+M = 1
+nb_M = "M=1"
+```
+
+
+```{r}
+Times = read.csv("death_france_30_march.csv")[2]
+c(Times[[1]][1], tail(Times[[1]],n=1))
+```
+
+```{r}
+smax=10.0 # modify to 5
+Tmax = tail(Times[[1]],n=1);
+Tinf = 11.0; 
+Times_obs=lapply(1:M,function(m){u_m=Times[[m]]; u_m = u_m[u_m>Tinf]; u_m=u_m[u_m <= Tmax]})
+Times_utiles=lapply(1:M,function(m){u_m=Times[[m]]; u_m=u_m[u_m > Tinf-smax];  u_m=u_m[u_m <= Tmax]})
+mat_obs_utiles =calc_mat_absc_utiles(Times_utiles,Times_obs,smax)
+data=list(mat_obs_utiles=mat_obs_utiles);
+data$Times_utiles = Times_utiles  
+data$Times_obs = Times_obs
+data$Tinf = rep(Tinf,M)
+data$Tmax = rep(Tmax,M)
+data$smax = smax 
+```
+
+```{r}
+n_days = round(Times)
+deaths = list()
+deaths$days=seq(1,round(Tmax),1)
+deaths$counts = lapply(1:round(Tmax),function(m){length(which(n_days==m));})
+plot(deaths$days, deaths$counts) 
+```
+
+
+```{r}
+
+#--------------------------------
+#------  PRIOR DISTRIBUTION
+#-------------------------------
+p_Z = c(0.5,0.5);
+p_Z=p_Z/sum(p_Z)
+pi_0 = 0.5;
+mu_lalpha =2.5;
+s_lalpha = 1
+mu_lnu = rep(1.0,M);
+s_lnu=rep(1,M)
+hyperParam_prior=list(M=M,mu_lalpha=mu_lalpha,s_lalpha=s_lalpha,mu_lnu=mu_lnu,s_lnu=s_lnu,p_Z=p_Z,a_s=2,pi_0=pi_0)
+hyperParam_prior$a_lambda_K = 20;
+hyperParam_prior$b_lambda_K = 1
+lambda_K = rgamma(1,hyperParam_prior$a_lambda_K,hyperParam_prior$b_lambda_K) # hyperparameter eta? 
+hyperParam_prior$lambda_K=lambda_K
+```
+
+
+```{r}
+#-----------------------------
+#--------- REVERSIBLE JUMP
+#------------------------------
+
+#------ tuning 
+N_MCMC = 50000
+op_echan = list(alpha = c(1:M^2),K = c(1:M^2),nu = c(1:M),lambda_K = c(1),delta = c(),s = c(1:M^2))
+par_algo_MCMC =list(op_echan = op_echan)
+par_algo_MCMC$op_affichage = 1000
+par_algo_MCMC$N_MCMC = N_MCMC
+par_algo_MCMC$rho_lnu = 1
+par_algo_MCMC$rho_lalpha = 1
+```
+
+
+```{r}
+#--------- Initialisation
+h_init = list()
+h_init$smax = rep(smax,M^2)
+h_init$delta = rep(1,M^2)
+h_init$K =  rep(1,M^2) #  rep(1,M^2)
+h_init$s =   list();
+for (p in  1:(M^2)) {h_init$s[[p]] =   seq(0,h_init$smax[p],length = h_init$K[p] + 1)} # Why only 2 bins?
+#h_init$alpha =   lapply(1:M^2,function(p){c(0)}) # initialisation hauteur des palliers
+#h_init$lalpha =   lapply(1:M^2,function(p){c(-10000)}) # 
+h_init$alpha = lapply(1:M^2,function(p){c(0.1)}) # h(0)=0?
+h_init$lalpha = lapply(1:M^2,function(p){c(log(0.1))}) 
+nu_init  =  vapply(1:M,function(m){0.002 * length(data$Times_obs[[m]])/(data$Tmax[m] - data$Tinf[m])},1)
+theta_init =   list(h =   h_init,nu =   nu_init,lambda_K =   lambda_K)
+INPUT =   list(theta =   theta_init)
+```
+
+```{r}
+nu_init[[1]]
+
+    
+```{r}
+#------- Running MCMC (Reversible Jump) 
+resMCMC = RJ_Kernel_moving_s_positive_intensity(data,INPUT,hyperParam_prior,par_algo_MCMC)
+resMCMC$INPUT <- INPUT
+resMCMC$hyperParam_prior <- hyperParam_prior
+resMCMC$par_algo_MCMC <- par_algo_MCMC
+
+```
+
+
+```{r}
+plot(absc, traj[1,])
+resMCMC$h[[1000]]$s
+h_func = stepfun(resMCMC$h[[1]]$s[[1]],c(0,resMCMC$h[[1]]$alpha[[1]],0),right=TRUE)
+```
+
+```{r}
+#----------------------------------------------------
+#-------------------------- POSTERIOR inference
+#---------------------------------------------------- 
+part=seq(30000,50000,by=5)
+L=length(part)
+print(L)
+
+lensim  = "T=30days"
+absc=seq(0,10.0,len=100)
+traj = matrix(0,L,length(absc))
+for (j in 1:L){
+  h_func_j = stepfun(resMCMC$h[[part[j]]]$s[[1]],c(0,resMCMC$h[[part[j]]]$alpha[[1]],0),right=TRUE)
+  traj[j,]=h_func_j(absc)
+}
+est_h = apply(traj,2,mean)
+h_05 = vapply(1:100,function(j){quantile(traj[,j],0.05)},1)
+h_50 = vapply(1:100,function(j){quantile(traj[,j],0.5)},1)
+h_95 = vapply(1:100,function(j){quantile(traj[,j],0.95)},1)
+h_vrai = h_50
+H = c(h_vrai,est_h,h_50)
+var.names = rep(c("h","Post Mean","Median"),each = length(absc))
+Vec.absc = rep(absc,3)
+estim.h = data.frame(H = H,var.names,est_h,Time = Vec.absc)
+
+#  
+rib <- data.frame(Time = absc)
+rib$H_min <- h_05;
+rib$H_max <- h_95
+
+estim.h$Func = factor(estim.h$var.names , levels = c("h","Post Mean","Median"))
+
+
+p <-  ggplot()
+p <- p +  geom_ribbon(data = rib,aes(x = rib$Time, ymin = rib$H_min, ymax = rib$H_max),alpha = 0.1,fill="blue",colour='black')
+p <- p +  geom_line(data = estim.h, aes(x=Time,y=H,group = Func,colour = Func,linetype = Func),lwd=1.01)
+p <- p + scale_fill_brewer(palette =  "Dark2") + scale_color_brewer(palette="Dark2")
+p <- p + ylab("y") + xlab('x')
+p
+```
+
+```{r}
+sum(h_50*(absc[2]-absc[1]))
+```
+
+```{r}
+
+m=1
+
+jumps <- jumps_integral(data$Times_utiles,h_med$s,1,21.5,h_med$smax)
+mat_centerjumps_utiles <- calc_mat_absc_utiles(data$Times_utiles,center_jumps(jumps),h_med$smax)
+lambda_vrai = lambda_cond_multidim_mat(mat_centerjumps_utiles,h_med,nu_med)
+
+plot(center_jumps(jumps)[[m]],lambda_vrai[[m]],type='n',xlab='Time',ylab='Conditional Intensities')
+
+for (l in 1:10){
+  nu_l = resMCMC$nu[part[l],]
+  h_l = resMCMC$h[[part[l]]]
+  jumps.l <- jumps_integral(data$Times_utiles,h_l$s,Tinf,Tmax,h_l$smax)
+  mat_centerjumps_utiles.l <- calc_mat_absc_utiles(data$Times_utiles,center_jumps(jumps.l),h_l$smax)
+  lambda_l = lambda_cond_multidim_mat(mat_centerjumps_utiles.l,h_l,nu_l)
+  lines(center_jumps(jumps.l)[[m]],lambda_l[[m]],col='grey',type='s')
+}
+lines(center_jumps(jumps)[[m]],lambda_vrai[[m]],type='s',xlab='Time',ylab='Conditional Intensities')
+lines(deaths$days, deaths$counts,col="red")
+```
+
+
+```{r}
+part=seq(30000,50000,by=1)
+L=length(part)
+
+
+lensim  = "T=30days"
+absc=seq(0,smax,len=100)
+traj_nu = matrix(0,L,1)
+for (j in 1:L){
+  traj_nu[j,] = resMCMC$nu[part[j]]
+}
+```
+
+```{r}
+summary(traj_nu)
+plot(density(traj_nu))
+```
+
+```{r}
+est_nu = apply(traj_nu,2,mean)
+nu_05 =quantile(traj_nu[,1],0.05)
+nu_50 = quantile(traj_nu[,1],0.5) #vapply(1:100,function(j){quantile(traj_nu[,j],0.5)},1)
+nu_95 = quantile(traj_nu[,1],0.95) #vapply(1:100,function(j){quantile(traj_nu[,j],0.95)},1)
+nu_vrai = nu_50
+H = c(nu_vrai,est_nu,nu_50)
+var.names = c("nu","Post Mean","Median")
+estim.nu = data.frame(H = H,var.names,est_nu)
+nu_50
+
+```
+
+```{r}
+h_med = list()
+h_med$smax = rep(smax,M^2)
+h_med$delta = rep(1,M^2)
+h_med$K =  rep(1,M^2) #  rep(1,M^2)
+h_med$s =   list();
+for (p in  1:(M^2)) {h_med$s[[p]] =   absc}
+h_med$alpha = lapply(1:M^2,function(p){h_50[-c(1)]})
+h_med$lalpha = lapply(1:M^2,function(p){log(h_50)})
+```
+
+```{r}
+
+nu_med  =  vapply(1:M,function(m){nu_50},1)
+resMCMC$lambda_K[[1]]
+h_init$s
+h_init$alpha
+```
+
+```{r}
+traj_ll = matrix(0,L,1)
+mat_absc_utiles <- calc_mat_absc_utiles(Times_utiles, absc, smax)
+idx <- func_idx(mat_obs_utiles, h_init$s)
+J  <- calc_J(Times_utiles, h_med$s, Tinf, Tmax)
+log_lik = log_likelihood_hawkes_multidim_positive_intensity(data, idx, J, h_med, nu_med, op='vec')
+log_lik
+```
+
+```{r}
+t_val =   list();
+for (p in  1:(M^2)) {t_val[[p]]=   seq(0,Tmax,length = 1000)}
+h_init$s[[1]]
+c(0, h_init$alpha[[1]], 0)
+h_f = list()
+for (p in  1:(M^2)) {h_f[[p]]=stepfun(h_init$s[[p]],c(0, h_init$alpha[[p]], 0),right=T)}
+#h_f = stepfun(h_init$s[[1]],c(0, h_init$alpha[[1]], 0),right=T)
+D <- outer(t_val[[1]],Times_obs[[Times_obs[[1]]]],'-')
+D
+D[D<0] <- Inf
+rowSums(h_f[[1]](D))
+intensity = lambda_cond_multidim_allh(t_val,Times_utiles,h_f,nu_init)
+```
+
+
+
+```{r}
+eval_lambda = lambda_cond_multidim_mat_positive_intensity(data$mat_obs_utiles,idx,h_med,nu_med)
+data$mat_obs_utiles
+eval_lambda[[1]]
+```
+
+```{r}
+t <- func_idx(mat_obs_utiles, t_val)
+intens <- lambda_cond_multidim_mat_positive_intensity(mat_obs_utiles,t,h_init,nu_init)
+```
+
+```{r}
+intens[[1]]
+```
+
+```{r}
+plot(Times_obs[[1]],intens[[1]])
+```
+
+```{r}
+t_val =   list();
+for (p in  1:(M^2)) {t_val[[p]]=   seq(0,Tmax,length = 1000)}
+mat_absc_utiles <- calc_mat_absc_utiles(Times_utiles, t_val, smax)
+```
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
