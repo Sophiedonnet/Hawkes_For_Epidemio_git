@@ -99,6 +99,7 @@ hyperParam_prior=list(M=M,mu_lalpha=mu_lalpha,s_lalpha=s_lalpha,mu_lnu=mu_lnu,s_
 
 #------ tuning 
 N_MCMC = 30000
+burn_in = 10000
 #N_MCMC = 50000
 op_echan = list(alpha = c(1:M^2),K = c(1:M^2),nu = c(1:M),delta = c(),s = c(1:M^2))
 #op_echan = list(alpha = c(1:M^2),K = c(1:M^2),nu = c(1:M),lambda_K = c(1),delta = c(),s = c(1:M^2))
@@ -116,10 +117,10 @@ h_init$smax = rep(smax,M^2)
 h_init$delta = rep(1,M^2)
 h_init$K =   rep(smax,M^2)
 h_init$s =   list(); for (p in  1:(M^2)) {h_init$s[[p]] =   seq(0,h_init$smax[p],length =   h_init$K[p] + 1)}
-#h_init$alpha =   lapply(1:M^2,function(p){dnorm(s[[p]][-1],1.2,1)}) 
-#h_init$lalpha =   lapply(1:M^2,function(p){log(h_init$alpha[[1]])})
-h_init$alpha =   lapply(1:M^2,function(p){rep(0,smax)})
-h_init$lalpha =   lapply(1:M^2,function(p){rep(-10000,smax)})
+h_init$alpha =   lapply(1:M^2,function(p){dnorm(s[[p]][-1],1.2,1)}) 
+h_init$lalpha =   lapply(1:M^2,function(p){log(h_init$alpha[[1]])})
+#h_init$alpha =   lapply(1:M^2,function(p){rep(0,smax)})
+#h_init$lalpha =   lapply(1:M^2,function(p){rep(-10000,smax)})
 nu_init  =    vapply(1:M,function(m){length(data$Times_obs[[m]][,1])/(data$Tmax[m] - data$Tinf[m])},1)
 theta_init =   list(h =   h_init,nu =   nu_init)
 #theta_init =   list(h =   h_init,nu =   nu_init,lambda_K =   lambda_K)
@@ -136,8 +137,7 @@ resMCMC$par_algo_MCMC <- par_algo_MCMC
 #----------------------------------------------------
 #-------------------------- POSTERIOR inference
 #---------------------------------------------------- 
-part=seq(10000,par_algo_MCMC$N_MCMC,by=5)
-#part=seq(20000,100000,by=5)
+part=seq(burn_in,par_algo_MCMC$N_MCMC,by=5)
 L=length(part)
 
 
@@ -177,19 +177,30 @@ p
 #----------------------------------------------
 # ------------- MCMC diagnostics
 #---------------------------------------------- 
-all_samples = t(sapply(1:resMCMC$par_algo_MCMC$N_MCMC, function(j) cbind(resMCMC$nu[j], t(resMCMC$h[[j]]$alpha[[1]]))))
+all_samples = t(sapply(burn_in:resMCMC$par_algo_MCMC$N_MCMC, function(j) cbind(resMCMC$nu[j], t(resMCMC$h[[j]]$alpha[[1]]))))
+colMeans(all_samples)
+par(mfrow=c(3,1))
+k=1
+#for (k in 1:ncol(all_samples)){
+  plot(all_samples[,k], type = "l", main=paste0(par_names[k]))
+  plot(density(all_samples[,k]), type = "l")
+  acf(all_samples[,k])
+#}
 
 thinned_samples = t(sapply(1:L, function(j) cbind(resMCMC$nu[part[j]], t(resMCMC$h[[part[j]]]$alpha[[1]]))))
 par_names = c("nu", "alpha_1", "alpha_2", "alpha_3")
 #, "alpha_4", "alpha_5", "alpha_6", "alpha_7"
 colnames(thinned_samples) = par_names
 ind = which(colSums(thinned_samples)>0)
+colMeans(thinned_samples)
 
 par(mfrow=c(3,1))
-for (k in ind){
+k=1
+#for (k in ind){
   plot(thinned_samples[,k], type = "l", main=paste0(par_names[k]))
   plot(density(thinned_samples[,k]), type = "l")
   acf(thinned_samples[,k])
-}
+#}
+
 ggpairs(as.data.frame(thinned_samples[,ind]))
 

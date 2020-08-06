@@ -17,7 +17,7 @@ RJ_Kernel_regular_s_dt = function(data, INPUT, hyperParam_prior, par_algo_MCMC,o
   
   
   obs_utiles = data$obs_utiles
-  Times_utiles = data$Times_utiles
+  #Times_utiles = data$Times_utiles
   #Times_obs = data$Times_obs
   Tmax = data$Tmax; 
   if (length(Tmax) != M) { 
@@ -168,130 +168,130 @@ RJ_Kernel_regular_s_dt = function(data, INPUT, hyperParam_prior, par_algo_MCMC,o
     #----------------------- move on lalpha
     #########################################
     
-    for (p in op_echan$alpha) {
-      
-      m <- (p - 1) %/% M + 1
-      
-      for (k in 1:(h$K[p])) { 
-        
-        h_c <- h;          
-        
-        rho_lalpha <- c(0.01,0.1,1)*par_algo_MCMC$rho_lalpha;
-        
-        if (h$alpha[[p]][k] == 0) {
-          h_c$lalpha[[p]][k] <- rnorm(1,mu_lalpha,s_lalpha); 
-          p_Z_move = 1;
-          
-        }else{
-          p_Z_move = 0.5
-          Z = rbinom(1,1,p_Z_move); 
-          
-          if (Z == 0) { 
-            h_c$lalpha[[p]][k] = -10000
-          }else{
-            h_c$lalpha[[p]][k] = rnorm(1,h$lalpha[[p]][k],rho_lalpha[sample(1:3,1)])
-          }
-        }
-        h_c$alpha[[p]] = exp(h_c$lalpha[[p]])
-        #------------ proba of move  
-
-
-
-        if ((sum(h_c$alpha[[p]] == 0) == h_c$K[p])) { 
-          proba_accept = -Inf 
-        }else{
-          p_Z_move_c = 0.5
-          d1 = sum(vapply(1:3,function(j) { dnorm(h_c$lalpha[[p]][k],h$lalpha[[p]][k],rho_lalpha[j])},1))/3
-          d1c = sum(vapply(1:3,function(j) { dnorm(h$lalpha[[p]][k],h_c$lalpha[[p]][k],rho_lalpha[j])},1))/3
-          p3_1 = log((h$alpha[[p]][k] == 0) * dnorm(h_c$lalpha[[p]][k],mu_lalpha,s_lalpha)  +  
-                       (h$alpha[[p]][k] > 0)*((1 - p_Z_move) * (h_c$alpha[[p]][k] == 0) +  
-                        p_Z_move*(h_c$alpha[[p]][k] > 0)*d1))
-          p3_2 = log((h_c$alpha[[p]][k] == 0) * dnorm(h$lalpha[[p]][k],mu_lalpha,s_lalpha)  +  
-                       (h_c$alpha[[p]][k] > 0)*((1 - p_Z_move_c) * (h$alpha[[p]][k] == 0) +  
-                        p_Z_move_c*(h$alpha[[p]][k] > 0)*d1c))
-          log_p_passage = p3_1 - p3_2
-          log_prior_h_c = dprior_h_regular_s(h_c,hyperParam_prior)
-          log_lik_c = log_likelihood_multidim_dt(data,h_c,nu,op = 'vec')            
-          proba_accept = sum(log_lik_c - log_lik) - log_p_passage  + log_prior_h_c$h - log_prior_h$h
-        }
-        test_accept = log(runif(1)) < proba_accept
-        
-        if (test_accept == TRUE) {  
-          h = h_c; 
-          log_lik = log_lik_c; 
-          log_prior_h  = log_prior_h_c;  
-          compt_accept_heights = compt_accept_heights + 1
-        }
-      }
-    }
-    
+    # for (p in op_echan$alpha) {
+    #   
+    #   m <- (p - 1) %/% M + 1
+    #   
+    #   for (k in 1:(h$K[p])) { 
+    #     
+    #     h_c <- h;          
+    #     
+    #     rho_lalpha <- c(0.01,0.1,1)*par_algo_MCMC$rho_lalpha;
+    #     
+    #     if (h$alpha[[p]][k] == 0) {
+    #       h_c$lalpha[[p]][k] <- rnorm(1,mu_lalpha,s_lalpha); 
+    #       p_Z_move = 1;
+    #       
+    #     }else{
+    #       p_Z_move = 0.5
+    #       Z = rbinom(1,1,p_Z_move); 
+    #       
+    #       if (Z == 0) { 
+    #         h_c$lalpha[[p]][k] = -10000
+    #       }else{
+    #         h_c$lalpha[[p]][k] = rnorm(1,h$lalpha[[p]][k],rho_lalpha[sample(1:3,1)])
+    #       }
+    #     }
+    #     h_c$alpha[[p]] = exp(h_c$lalpha[[p]])
+    #     #------------ proba of move  
+    # 
+    # 
+    # 
+    #     if ((sum(h_c$alpha[[p]] == 0) == h_c$K[p])) { 
+    #       proba_accept = -Inf 
+    #     }else{
+    #       p_Z_move_c = 0.5
+    #       d1 = sum(vapply(1:3,function(j) { dnorm(h_c$lalpha[[p]][k],h$lalpha[[p]][k],rho_lalpha[j])},1))/3
+    #       d1c = sum(vapply(1:3,function(j) { dnorm(h$lalpha[[p]][k],h_c$lalpha[[p]][k],rho_lalpha[j])},1))/3
+    #       p3_1 = log((h$alpha[[p]][k] == 0) * dnorm(h_c$lalpha[[p]][k],mu_lalpha,s_lalpha)  +  
+    #                    (h$alpha[[p]][k] > 0)*((1 - p_Z_move) * (h_c$alpha[[p]][k] == 0) +  
+    #                     p_Z_move*(h_c$alpha[[p]][k] > 0)*d1))
+    #       p3_2 = log((h_c$alpha[[p]][k] == 0) * dnorm(h$lalpha[[p]][k],mu_lalpha,s_lalpha)  +  
+    #                    (h_c$alpha[[p]][k] > 0)*((1 - p_Z_move_c) * (h$alpha[[p]][k] == 0) +  
+    #                     p_Z_move_c*(h$alpha[[p]][k] > 0)*d1c))
+    #       log_p_passage = p3_1 - p3_2
+    #       log_prior_h_c = dprior_h_regular_s(h_c,hyperParam_prior)
+    #       log_lik_c = log_likelihood_multidim_dt(data,h_c,nu,op = 'vec')            
+    #       proba_accept = sum(log_lik_c - log_lik) - log_p_passage  + log_prior_h_c$h - log_prior_h$h
+    #     }
+    #     test_accept = log(runif(1)) < proba_accept
+    #     
+    #     if (test_accept == TRUE) {  
+    #       h = h_c; 
+    #       log_lik = log_lik_c; 
+    #       log_prior_h  = log_prior_h_c;  
+    #       compt_accept_heights = compt_accept_heights + 1
+    #     }
+    #   }
+    # }
+    # 
 
     #   ###########################################
     #----------------------- birth and death
     #########################################
-
-    for (p in op_echan$K) {
-      K_p = h$K[p];
-      log_lik_c = log_lik
-      m <- (p - 1) %/% M + 1
-      h_c <- h;
-      move = sample(c('birth','death'),1,prob = pi_moves[K_p,])
-      if (move == 'birth') {
-        indic_simu = 'birth'
-        h_small <- h;
-        h_big <- h;
-        h_big$K[p] =  h_small$K[p]  +  1
-        prob_k_star = diff(h_small$s[[p]])/h_small$smax[p]
-        k_star = sample(1:(h_small$K[p]),1,prob = prob_k_star) #### on aura tendance à proposer de couper les longs paliers.
-        h_big$s[[p]] = seq(0,smax[p], length.out = h_big$K[p] + 1)
-        if (k_star > 1) { mu_k_star = 0.5*(h_small$lalpha[[p]][k_star - 1] + h_small$lalpha[[p]][k_star]); sigma = 0.1}
-        if (k_star == 1) { mu_k_star = h_small$lalpha[[p]][1]; sigma = 0.1}
-        lalpha_k_star = mu_k_star  +  sigma*rnorm(1);
-        if (k_star == 1) { h_big$lalpha[[p]] = c(lalpha_k_star,h_small$lalpha[[p]])}
-        if (k_star > 1) { h_big$lalpha[[p]] = c(h_small$lalpha[[p]][1:(k_star - 1)],lalpha_k_star,h_small$lalpha[[p]][(k_star):h_small$K[p]])}
-        # Jacob = 1;
-        log_prob_proposal = dnorm(lalpha_k_star,mu_k_star,sigma,log = TRUE) + log(1/h_small$K[p]) + log(pi_moves[h_small$K[p],1]) - log(pi_moves[h_big$K[p],2]);
-        h_big$alpha = lapply(1:M^2,function(p) { exp(h_big$lalpha[[p]])})
-        h_c = h_big;
-      }
-
-      if (move == 'death') {
-        indic_simu = 'death'
-        h_big <- h
-        h_small <- h ;
-        h_small$K[p] <- h_big$K[p] - 1
-        k_star <- sample(1:(h_big$K[p] - 1),1)
-        h_small$s[[p]] <- seq(0,smax[p],len = h_small$K[p] + 1);
-        h_small$lalpha[[p]] <- h_big$lalpha[[p]][-k_star]
-        lalpha_k_star <-  h_big$lalpha[[p]][k_star]
-        if (k_star > 1) { mu_k_star = 0.5*(h_small$lalpha[[p]][k_star - 1] + h_small$lalpha[[p]][k_star]); sigma = 0.1};
-        if (k_star == 1) { mu_k_star = h_small$lalpha[[p]][1]; sigma = 0.1}
-
-        log_prob_proposal = dnorm(lalpha_k_star,mu_k_star,sigma,log = TRUE) + log(1 / h_small$K[p]) + log(pi_moves[h_small$K[p],1]) - log(pi_moves[h_big$K[p],2])
-        log_prob_proposal = -log_prob_proposal
-        h_small$alpha = lapply(1:M^2,function(p) { exp(h_small$lalpha[[p]])})
-        h_c = h_small;
-      }
-
-      if (prod(h_c$alpha[[p]] == 0) == 1) {
-        h_c$alpha[[p]] = c(0)
-        h_c$lalpha[[p]] = c(-10000)
-        h_c$delta[p] = 0;
-        h_c$K[p] = 1
-        h_c$s[[p]] = c(0,smax[p])
-      }
-
-      log_lik_c = log_lik
-      log_prior_h_c = dprior_h_regular_s(h_c,hyperParam_prior)
-      log_lik_c[m] = log_likelihood_multidim_dt(data,h_c,nu,m)
-      proba_accept = log_lik_c[m] - log_lik[m]  + log_prior_h_c$h - log_prior_h$h - log_prob_proposal;
-      test_accept = log(runif(1)) < proba_accept
-
-
-      if ((test_accept == TRUE) & (move == "birth")) { taux_accept_birth = taux_accept_birth + 1 }
-      if ((test_accept == TRUE) & (move == "death")) { taux_accept_death = taux_accept_death + 1 }  #
-      if (test_accept == TRUE) {  h = h_c; log_lik = log_lik_c; log_prior_h  = log_prior_h_c}
-    }
+# 
+#     for (p in op_echan$K) {
+#       K_p = h$K[p];
+#       log_lik_c = log_lik
+#       m <- (p - 1) %/% M + 1
+#       h_c <- h;
+#       move = sample(c('birth','death'),1,prob = pi_moves[K_p,])
+#       if (move == 'birth') {
+#         indic_simu = 'birth'
+#         h_small <- h;
+#         h_big <- h;
+#         h_big$K[p] =  h_small$K[p]  +  1
+#         prob_k_star = diff(h_small$s[[p]])/h_small$smax[p]
+#         k_star = sample(1:(h_small$K[p]),1,prob = prob_k_star) #### on aura tendance à proposer de couper les longs paliers.
+#         h_big$s[[p]] = seq(0,smax[p], length.out = h_big$K[p] + 1)
+#         if (k_star > 1) { mu_k_star = 0.5*(h_small$lalpha[[p]][k_star - 1] + h_small$lalpha[[p]][k_star]); sigma = 0.1}
+#         if (k_star == 1) { mu_k_star = h_small$lalpha[[p]][1]; sigma = 0.1}
+#         lalpha_k_star = mu_k_star  +  sigma*rnorm(1);
+#         if (k_star == 1) { h_big$lalpha[[p]] = c(lalpha_k_star,h_small$lalpha[[p]])}
+#         if (k_star > 1) { h_big$lalpha[[p]] = c(h_small$lalpha[[p]][1:(k_star - 1)],lalpha_k_star,h_small$lalpha[[p]][(k_star):h_small$K[p]])}
+#         # Jacob = 1;
+#         log_prob_proposal = dnorm(lalpha_k_star,mu_k_star,sigma,log = TRUE) + log(1/h_small$K[p]) + log(pi_moves[h_small$K[p],1]) - log(pi_moves[h_big$K[p],2]);
+#         h_big$alpha = lapply(1:M^2,function(p) { exp(h_big$lalpha[[p]])})
+#         h_c = h_big;
+#       }
+# 
+#       if (move == 'death') {
+#         indic_simu = 'death'
+#         h_big <- h
+#         h_small <- h ;
+#         h_small$K[p] <- h_big$K[p] - 1
+#         k_star <- sample(1:(h_big$K[p] - 1),1)
+#         h_small$s[[p]] <- seq(0,smax[p],len = h_small$K[p] + 1);
+#         h_small$lalpha[[p]] <- h_big$lalpha[[p]][-k_star]
+#         lalpha_k_star <-  h_big$lalpha[[p]][k_star]
+#         if (k_star > 1) { mu_k_star = 0.5*(h_small$lalpha[[p]][k_star - 1] + h_small$lalpha[[p]][k_star]); sigma = 0.1};
+#         if (k_star == 1) { mu_k_star = h_small$lalpha[[p]][1]; sigma = 0.1}
+# 
+#         log_prob_proposal = dnorm(lalpha_k_star,mu_k_star,sigma,log = TRUE) + log(1 / h_small$K[p]) + log(pi_moves[h_small$K[p],1]) - log(pi_moves[h_big$K[p],2])
+#         log_prob_proposal = -log_prob_proposal
+#         h_small$alpha = lapply(1:M^2,function(p) { exp(h_small$lalpha[[p]])})
+#         h_c = h_small;
+#       }
+# 
+#       if (prod(h_c$alpha[[p]] == 0) == 1) {
+#         h_c$alpha[[p]] = c(0)
+#         h_c$lalpha[[p]] = c(-10000)
+#         h_c$delta[p] = 0;
+#         h_c$K[p] = 1
+#         h_c$s[[p]] = c(0,smax[p])
+#       }
+# 
+#       log_lik_c = log_lik
+#       log_prior_h_c = dprior_h_regular_s(h_c,hyperParam_prior)
+#       log_lik_c[m] = log_likelihood_multidim_dt(data,h_c,nu,m)
+#       proba_accept = log_lik_c[m] - log_lik[m]  + log_prior_h_c$h - log_prior_h$h - log_prob_proposal;
+#       test_accept = log(runif(1)) < proba_accept
+# 
+# 
+#       if ((test_accept == TRUE) & (move == "birth")) { taux_accept_birth = taux_accept_birth + 1 }
+#       if ((test_accept == TRUE) & (move == "death")) { taux_accept_death = taux_accept_death + 1 }  #
+#       if (test_accept == TRUE) {  h = h_c; log_lik = log_lik_c; log_prior_h  = log_prior_h_c}
+#     }
 
     ########################################### 
     ########### lambda_K

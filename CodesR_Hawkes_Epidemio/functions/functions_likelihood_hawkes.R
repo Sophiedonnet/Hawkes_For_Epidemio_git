@@ -71,7 +71,25 @@ calc_mat_absc_utiles= function(Times_utiles,absc,smax){
 }
   # ### verif taille
   
- 
+
+calc_mat_absc_utiles_p=function(Times_utiles_l, absc_m, smax_p){
+  n_lm= length(absc_m);
+  g= function(k){
+    ulm_k = absc_m[k]-Times_utiles_l[Times_utiles_l<absc_m[k]];
+    ulm_k = ulm_k[ulm_k<smax_p]
+    if (length(ulm_k)==0){ulm_k=c(0)}
+    return(c(ulm_k))
+  }
+  List_lm = lapply(1:n_lm,g);
+  len = vapply(1:n_lm,function(k){length(List_lm[[k]])},1)
+  Lmax = max(len)+1
+  v=rep(0,Lmax)
+  mat_lm = vapply(1:n_lm,function(k){c(List_lm[[k]][1:len[k]],rep(0,Lmax-len[k]))},v)
+  res_lm=list(mat=mat_lm,size_mat=dim(mat_lm)[1])
+  return(res_lm)
+}
+
+
 
 calc_mat_absc_utiles_m= function(Times_utiles,absc,smax,m0){
   M=sqrt(length(smax))
@@ -254,24 +272,6 @@ log_likelihood_hawkes_multidim_m=function(mat_obs_utiles,mat_centerjumps_utiles,
   L_m = sum(log(eval_lambda_m))-I_m
   return(L_m)
 }
-
-calc_mat_absc_utiles_p=function(Times_utiles_l, absc_m, smax_p){
-   n_lm= length(absc_m);
-   g= function(k){
-       ulm_k = absc_m[k]-Times_utiles_l[Times_utiles_l<absc_m[k]];
-       ulm_k = ulm_k[ulm_k<smax_p]
-       if (length(ulm_k)==0){ulm_k=c(0)}
-       return(c(ulm_k))
-   }
-   List_lm = lapply(1:n_lm,g);
-   len = vapply(1:n_lm,function(k){length(List_lm[[k]])},1)
-   Lmax = max(len)+1
-   v=rep(0,Lmax)
-   mat_lm = vapply(1:n_lm,function(k){c(List_lm[[k]][1:len[k]],rep(0,Lmax-len[k]))},v)
-   res_lm=list(mat=mat_lm,size_mat=dim(mat_lm)[1])
-   return(res_lm)
- }
-
 
 #
 # calc_mat_absc_utiles_non_C= function(Times_utiles,absc,smax){

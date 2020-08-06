@@ -193,6 +193,7 @@ func_h=function(absc,alpha,s){
 ###############################################
 
 simulation_hawkes_multidim=function(Tmax,h,nu,op_affichage=0){
+
   ############### simulation 
   M = length(nu) # nombre de neurones
   Times=lapply(1:M,function(j){c()})
