@@ -58,7 +58,7 @@ RJ_Kernel_regular_s_dt = function(data, INPUT, hyperParam_prior, par_algo_MCMC,o
   lnu = log(nu)
   h = INPUT$theta$h
   
-  K = vapply(1:M^2,function(p) { length(h$alpha[[p]])},2)
+  K = vapply(1:M^2,function(p) { length(h$gamma[[p]])},2)
   # delta = h$delta; 
   # s = h$s; 
   h$K = K; 
@@ -91,8 +91,10 @@ RJ_Kernel_regular_s_dt = function(data, INPUT, hyperParam_prior, par_algo_MCMC,o
   #J  <- calc_J(Times_utiles,h$s,Tinf,Tmax)
   
   log_lik = log_likelihood_multidim_dt(data,h,nu,op = 'vec')
-  log_prior_h = dprior_h_regular_s(h,hyperParam_prior)
+  #log_prior_h = dprior_h_regular_s(h,hyperParam_prior)
+  log_prior_h = sum(dnorm(h$lgamma[[1]],mu_lgamma,s_lgamma, log=TRUE))
   log_prior_lnu = dnorm(lnu,mu_lnu,s_lnu,log = TRUE)
+  log_prior_lbeta = dnorm(h$lbeta,mu_lbeta,s_lbeta,log = TRUE)
 
   # absc = seq(0,INPUT$theta$h$smax[1],len = 110)
   # list_mat_h = list(); 
@@ -108,29 +110,28 @@ RJ_Kernel_regular_s_dt = function(data, INPUT, hyperParam_prior, par_algo_MCMC,o
   ########################################################
   for (it in 2:N_MCMC) { 
     
-    if (it %% par_algo_MCMC$op_affichage == 0) { 
+    if (it %% par_algo_MCMC$op_affichage == 0) {
       #print(c(it,nu,lambda_K))
       print(c(it,nu))
     }
     
-    
     ######################### nu | Times,aires
     
-     for (m in op_echan$nu) { 
-      rho_lnu = c(0.01,0.1,0.5)*par_algo_MCMC$rho_lnu; 
+     for (m in op_echan$nu) {
+      rho_lnu = c(0.01,0.1,0.5)*par_algo_MCMC$rho_lnu;
       S = sample(1:3,1)
       lnu_c = lnu;
       lnu_c[m] = lnu[m] + rnorm(1,0,rho_lnu[S]);
       nu_c = exp(lnu_c)
-      
+
       log_lik_c  = log_likelihood_multidim_dt(data,h,nu_c,op = 'vec')
       log_prior_lnu_c_m = dnorm(lnu_c[m],mu_lnu[m],s_lnu[m],log = TRUE)
       p1 = log_lik_c[m] - log_lik[m]
       p2 = log_prior_lnu_c_m - log_prior_lnu[m]
-      
+
       test_accept = log(runif(1)) <= (p1 + p2);
-      
-      if (test_accept == TRUE) { 
+
+      if (test_accept == TRUE) {
         nu = nu_c
         lnu = lnu_c
         log_lik = log_lik_c
@@ -138,93 +139,166 @@ RJ_Kernel_regular_s_dt = function(data, INPUT, hyperParam_prior, par_algo_MCMC,o
       }
     }
     
-    ######## Adjusted Langevin Metropolis on log nu
+    # ######## Adjusted Langevin Metropolis on log nu
+    # 
+    # if (length(op_echan$nu)  ==  M) {
+    #   rho_lnu <- 0.1
+    #   eval_lambda <- lambda_cond_multidim_dt(obs_utiles,h,nu)
+    #   grad_log_post <- vapply(1:M,function(m) { nu[m]*sum(data$Times_obs[[m]][,2]/eval_lambda[[m]])},1) - nu[m]*(Tmax - Tinf) - 1/s_lnu^2*(lnu - mu_lnu)
+    #   lnu_c <- lnu  +  rho_lnu*grad_log_post  +  sqrt(2*rho_lnu)*rnorm(M);
+    #   nu_c <- exp(lnu_c)
+    #   log_lik_c <- log_likelihood_multidim_dt(data,h,nu_c,op = "vec")
+    #   log_prior_lnu_c <- dnorm(lnu_c,mu_lnu,s_lnu,log = TRUE)
+    #   q_nu_c_nu <- sum(dnorm(lnu_c,lnu  +  rho_lnu * grad_log_post,2 * rho_lnu,log = TRUE))
+    # 
+    #   eval_lambda_c <- lambda_cond_multidim_dt(obs_utiles,h,nu_c)
+    #   grad_log_post_c <- vapply(1:M,function(m) { nu_c[m]*sum(data$Times_obs[[m]][,2]/eval_lambda[[m]])},1) - nu_c[m]*(Tmax - Tinf) - 1/s_lnu^2*(lnu_c - mu_lnu)
+    # 
+    #   q_nu_nu_c <- sum(dnorm(lnu,lnu_c  +  rho_lnu*grad_log_post_c,2 * rho_lnu,log = TRUE))
+    #   proba_accept <- sum(log_lik_c - log_lik)  + sum(log_prior_lnu_c - log_prior_lnu) - (q_nu_c_nu - q_nu_nu_c);
+    # 
+    #   test_accept <- log(runif(1)) <= proba_accept;
+    # 
+    #   if (test_accept == TRUE) {
+    #     lnu <- lnu_c; nu <- exp(lnu)
+    #     log_lik <- log_lik_c
+    #     log_prior_lnu <- log_prior_lnu_c
+    #   }
+    # }
+    # 
     
-    if (length(op_echan$nu)  ==  M) {
-      rho_lnu <- 0.2
-      eval_lambda <- lambda_cond_multidim_dt(obs_utiles,h,nu)
-      grad_log_post <- vapply(1:M,function(m) { nu[m]*sum(data$Times_obs[[m]][,2]/eval_lambda[[m]])},1) - nu[m]*(Tmax - Tinf) - 1/s_lnu^2*(lnu - mu_lnu) 
-      lnu_c <- lnu  +  rho_lnu*grad_log_post  +  sqrt(2*rho_lnu)*rnorm(M); 
-      nu_c <- exp(lnu_c)
-      log_lik_c <- log_likelihood_multidim_dt(data,h,nu_c,op = "vec")
-      log_prior_lnu_c <- dnorm(lnu_c,mu_lnu,s_lnu,log = TRUE)
-      q_nu_c_nu <- sum(dnorm(lnu_c,lnu  +  rho_lnu * grad_log_post,2 * rho_lnu,log = TRUE))
-      
-      eval_lambda_c <- lambda_cond_multidim_dt(obs_utiles,h,nu_c)
-      grad_log_post_c <- vapply(1:M,function(m) { nu_c[m]*sum(data$Times_obs[[m]][,2]/eval_lambda[[m]])},1) - nu_c[m]*(Tmax - Tinf) - 1/s_lnu^2*(lnu_c - mu_lnu) 
-      
-      q_nu_nu_c <- sum(dnorm(lnu,lnu_c  +  rho_lnu*grad_log_post_c,2 * rho_lnu,log = TRUE))
-      proba_accept <- sum(log_lik_c - log_lik)  + sum(log_prior_lnu_c - log_prior_lnu) - (q_nu_c_nu - q_nu_nu_c);
-      
-      test_accept <- log(runif(1)) <= proba_accept;
+    ######################### beta
 
-      if (test_accept == TRUE) { 
-        lnu <- lnu_c; nu <- exp(lnu)
-        log_lik <- log_lik_c
-        log_prior_lnu <- log_prior_lnu_c
+    for (m in op_echan$beta) {
+      rho_lbeta = c(0.01,0.1,0.5)*par_algo_MCMC$rho_lbeta;
+      S = sample(1:3,1)
+      h_c = h;
+      h_c$lbeta[m] = h$lbeta[m] + rnorm(1,0,rho_lbeta[S]);
+      h_c$beta = exp(h_c$lbeta)
+
+      log_lik_c  = log_likelihood_multidim_dt(data,h_c,nu,op = 'vec')
+      log_prior_lbeta_c_m = dnorm(h_c$lbeta[m],mu_lbeta[m],s_lbeta[m],log = TRUE)
+      p1 = log_lik_c[m] - log_lik[m]
+      p2 = log_prior_lbeta_c_m - log_prior_lbeta[m]
+
+      test_accept = log(runif(1)) <= (p1 + p2);
+
+      if (test_accept == TRUE) {
+        h = h_c
+        log_lik = log_lik_c
+        log_prior_lbeta[m] = log_prior_lbeta_c_m
       }
     }
+
+    # ###########################################
+    # #----------------------- move on lgamma
+    # #########################################
+
+    for (p in op_echan$gamma) {
+
+      m <- (p - 1) %/% M + 1
+
+      for (k in 2:(h$K[p])){
+      #for (k in c(3)){
+        
+        h_c <- h;
+        rho_lgamma <- c(0.01,0.1,0.5)*par_algo_MCMC$rho_lgamma;
+        h_c$lgamma[[p]][k] = rnorm(1,h$lgamma[[p]][k],rho_lgamma[sample(1:3,1)])
+        h_c$gamma[[p]][k] = exp(h_c$lgamma[[p]][k])
+
+        log_lik_c = log_likelihood_multidim_dt(data,h_c,nu,op = 'vec')
+        log_prior_h_c = sum(dnorm(h_c$lgamma[[1]],mu_lgamma,s_lgamma,log = TRUE))
+
+        proba_accept = sum(log_lik_c - log_lik) + log_prior_h_c - log_prior_h
+        #proba_accept = sum(log_lik_c - log_lik)
+
+        test_accept = log(runif(1)) < proba_accept
+
+        if (test_accept == TRUE) {
+          h = h_c;
+          log_lik = log_lik_c;
+          log_prior_h = log_prior_h_c
+          compt_accept_heights = compt_accept_heights + 1
+        }
+      }
+    }
+    
+   
+    
+    
     ###########################################
     #----------------------- move on lalpha
     #########################################
-    
+
     # for (p in op_echan$alpha) {
-    #   
+    # 
     #   m <- (p - 1) %/% M + 1
-    #   
-    #   for (k in 1:(h$K[p])) { 
-    #     
-    #     h_c <- h;          
-    #     
-    #     rho_lalpha <- c(0.01,0.1,1)*par_algo_MCMC$rho_lalpha;
-    #     
-    #     if (h$alpha[[p]][k] == 0) {
-    #       h_c$lalpha[[p]][k] <- rnorm(1,mu_lalpha,s_lalpha); 
-    #       p_Z_move = 1;
-    #       
-    #     }else{
-    #       p_Z_move = 0.5
-    #       Z = rbinom(1,1,p_Z_move); 
-    #       
-    #       if (Z == 0) { 
-    #         h_c$lalpha[[p]][k] = -10000
-    #       }else{
+    # 
+    #   for (k in 1:(h$K[p])) {
+    #   #for (k in c(2)) {
+    # 
+    #     h_c <- h;
+    # 
+    #     # if (k!=3){
+    #        rho_lalpha <- c(0.01,0.1,0.5)*par_algo_MCMC$rho_lalpha;
+    #     # } else {
+    #     #  rho_lalpha <- c(0.01,0.05,0.1)*par_algo_MCMC$rho_lalpha;
+    #     #}
+    # 
+    #     # if (h$alpha[[p]][k] == 0) {
+    #     #   h_c$lalpha[[p]][k] <- rnorm(1,mu_lalpha,s_lalpha);
+    #     #   p_Z_move = 1;
+    #     #
+    #     # }else{
+    #       #p_Z_move = 0.5
+    #       # p_Z_move = 1
+    #       # Z = rbinom(1,1,p_Z_move);
+    # 
+    #       # if (Z == 0) {
+    #       #   h_c$lalpha[[p]][k] = -10000
+    #       # }else{
     #         h_c$lalpha[[p]][k] = rnorm(1,h$lalpha[[p]][k],rho_lalpha[sample(1:3,1)])
-    #       }
-    #     }
+    #     #   }
+    #     # }
     #     h_c$alpha[[p]] = exp(h_c$lalpha[[p]])
-    #     #------------ proba of move  
+    #     #------------ proba of move
     # 
     # 
     # 
-    #     if ((sum(h_c$alpha[[p]] == 0) == h_c$K[p])) { 
-    #       proba_accept = -Inf 
+    #     if ((sum(h_c$alpha[[p]] == 0) == h_c$K[p])) {
+    #       proba_accept = -Inf
     #     }else{
-    #       p_Z_move_c = 0.5
-    #       d1 = sum(vapply(1:3,function(j) { dnorm(h_c$lalpha[[p]][k],h$lalpha[[p]][k],rho_lalpha[j])},1))/3
-    #       d1c = sum(vapply(1:3,function(j) { dnorm(h$lalpha[[p]][k],h_c$lalpha[[p]][k],rho_lalpha[j])},1))/3
-    #       p3_1 = log((h$alpha[[p]][k] == 0) * dnorm(h_c$lalpha[[p]][k],mu_lalpha,s_lalpha)  +  
-    #                    (h$alpha[[p]][k] > 0)*((1 - p_Z_move) * (h_c$alpha[[p]][k] == 0) +  
-    #                     p_Z_move*(h_c$alpha[[p]][k] > 0)*d1))
-    #       p3_2 = log((h_c$alpha[[p]][k] == 0) * dnorm(h$lalpha[[p]][k],mu_lalpha,s_lalpha)  +  
-    #                    (h_c$alpha[[p]][k] > 0)*((1 - p_Z_move_c) * (h$alpha[[p]][k] == 0) +  
-    #                     p_Z_move_c*(h$alpha[[p]][k] > 0)*d1c))
-    #       log_p_passage = p3_1 - p3_2
-    #       log_prior_h_c = dprior_h_regular_s(h_c,hyperParam_prior)
-    #       log_lik_c = log_likelihood_multidim_dt(data,h_c,nu,op = 'vec')            
-    #       proba_accept = sum(log_lik_c - log_lik) - log_p_passage  + log_prior_h_c$h - log_prior_h$h
+    #       # p_Z_move_c = 0.5
+    #       # d1 = sum(vapply(1:3,function(j) { dnorm(h_c$lalpha[[p]][k],h$lalpha[[p]][k],rho_lalpha[j])},1))/3
+    #       # d1c = sum(vapply(1:3,function(j) { dnorm(h$lalpha[[p]][k],h_c$lalpha[[p]][k],rho_lalpha[j])},1))/3
+    #       # p3_1 = log((h$alpha[[p]][k] == 0) * dnorm(h_c$lalpha[[p]][k],mu_lalpha,s_lalpha)  +
+    #       #              (h$alpha[[p]][k] > 0)*((1 - p_Z_move) * (h_c$alpha[[p]][k] == 0) +
+    #       #                                       p_Z_move*(h_c$alpha[[p]][k] > 0)*d1))
+    #       # p3_2 = log((h_c$alpha[[p]][k] == 0) * dnorm(h$lalpha[[p]][k],mu_lalpha,s_lalpha)  +
+    #       #              (h_c$alpha[[p]][k] > 0)*((1 - p_Z_move_c) * (h$alpha[[p]][k] == 0) +
+    #       #                                         p_Z_move_c*(h$alpha[[p]][k] > 0)*d1c))
+    #       #
+    #       #
+    #       # log_p_passage = p3_1 - p3_2
+    #       # log_prior_h_c = dprior_h_regular_s(h_c,hyperParam_prior)
+    #       log_p_passage=0
+    #       log_prior_h_c = sum(dnorm(h_c$lalpha[[p]],mu_lalpha,s_lalpha, log=TRUE))
+    #       log_lik_c = log_likelihood_multidim_dt(data,h_c,nu,op = 'vec')
+    # 
+    #       #proba_accept = sum(log_lik_c - log_lik) - log_p_passage  + log_prior_h_c$h - log_prior_h$h
+    #       proba_accept = sum(log_lik_c - log_lik) - log_p_passage  + log_prior_h_c - log_prior_h
     #     }
     #     test_accept = log(runif(1)) < proba_accept
-    #     
-    #     if (test_accept == TRUE) {  
-    #       h = h_c; 
-    #       log_lik = log_lik_c; 
-    #       log_prior_h  = log_prior_h_c;  
+    # 
+    #     if (test_accept == TRUE) {
+    #       h = h_c;
+    #       log_lik = log_lik_c;
+    #       log_prior_h  = log_prior_h_c;
     #       compt_accept_heights = compt_accept_heights + 1
     #     }
     #   }
     # }
-    # 
+
 
     #   ###########################################
     #----------------------- birth and death

@@ -66,7 +66,8 @@ lambda_cond_multidim_dt_m = function(absc_utiles,h,nu,m){
     decay_times = absc_utiles[[p]][[1]]
     decay_times_counts = absc_utiles[[p]][[2]]
     if(length(decay_times) > 0){
-      decay_vals = lapply(decay_times, function(x) h$alpha[[p]][x])
+      #decay_vals = lapply(decay_times, function(x) h$alpha[[p]][x])
+      decay_vals = lapply(decay_times, function(x) sapply(x, function(y) h$gamma[[p]][((which.max(h$s[[p]]>=y)-1))]/sum(h$s_diffs[[p]]*h$gamma[[p]])))
       decay_vals_total = Map('*',decay_vals,decay_times_counts)
     }else{
       decay_vals_total = list()
@@ -80,7 +81,8 @@ lambda_cond_multidim_dt_m = function(absc_utiles,h,nu,m){
   L_m=matrix(unlist(L_m), nrow=length(unlist(L_m)/M), ncol=M)
   if (is.vector(L_m)==TRUE){L_m=matrix(L_m,nrow=1,ncol=M)}
   R_m =rowSums(L_m)
-  y_m=nu[m] + R_m
+  #y_m=nu[m] + R_m
+  y_m=nu[m] + h$beta[m]*R_m
   return(y_m)
   
 }

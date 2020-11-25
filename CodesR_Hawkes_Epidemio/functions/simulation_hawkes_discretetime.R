@@ -11,8 +11,9 @@ simulate_data_multidim_dt = function(Tmax,h,nu){
   # First period of simulation
   i=1
   for (m in 1:M){
-    Intensities[[m]][i] = sum(nu)
-    Times[[m]][i,2] = rpois(1, lambda=Intensities[[m]][i])
+    Intensities[[m]][i] = nu[i]
+    Times[[m]][i,2] = 1
+    #Times[[m]][i,2] = rpois(1, lambda=Intensities[[m]][i]) #breaks if first draw is 0
   }
   
   for (i in 2:Tmax){
@@ -54,7 +55,8 @@ simulate_data_dt = function(Tmax,h,nu){
       sim_decay_vals_counts = 0
     }
     
-    sim_data[i,2] = nu + sum(sim_decay_vals_counts)
+    #sim_data[i,2] = nu + sum(sim_decay_vals_counts)
+    sim_data[i,2] = nu + h$beta[1] * sum(sim_decay_vals_counts)
     sim_data[i,3] = rpois(1, lambda=sim_data[i,2])
   }
   
